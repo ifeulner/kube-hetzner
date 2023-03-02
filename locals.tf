@@ -80,12 +80,9 @@ locals {
     }
   ]...)
 
-  # The main network cidr that all subnets will be created upon
-  network_ipv4_cidr = "10.0.0.0/8"
-
   # The first two subnets are respectively the default subnet 10.0.0.0/16 use for potientially anything and 10.1.0.0/16 used for control plane nodes.
   # the rest of the subnets are for agent nodes in each nodepools.
-  network_ipv4_subnets = [for index in range(256) : cidrsubnet(local.network_ipv4_cidr, 8, index)]
+  network_ipv4_subnets = [for index in range(256) : cidrsubnet(var.network_ipv4_cidr, 8, index)]
 
   # if we are in a single cluster config, we use the default klipper lb instead of Hetzner LB
   control_plane_count    = sum([for v in var.control_plane_nodepools : v.count])
@@ -122,11 +119,8 @@ locals {
   hetzner_metadata_service_ipv4 = "169.254.169.254/32"
   hetzner_cloud_api_ipv4        = "213.239.246.1/32"
 
-  # internal Pod CIDR, used for the controller and currently for calico
-  cluster_cidr_ipv4 = "10.42.0.0/16"
-
   whitelisted_ips = [
-    local.network_ipv4_cidr,
+    var.network_ipv4_cidr,
     local.hetzner_metadata_service_ipv4,
     local.hetzner_cloud_api_ipv4,
     "127.0.0.1/32",
@@ -135,44 +129,50 @@ locals {
   base_firewall_rules = concat([
     # Allowing internal cluster traffic and Hetzner metadata service and cloud API IPs
     {
-      direction  = "in"
-      protocol   = "tcp"
-      port       = "any"
-      source_ips = local.whitelisted_ips
+      description = "Allow Internal Cluster TCP Traffic"
+      direction   = "in"
+      protocol    = "tcp"
+      port        = "any"
+      source_ips  = local.whitelisted_ips
     },
     {
-      direction  = "in"
-      protocol   = "udp"
-      port       = "any"
-      source_ips = local.whitelisted_ips
+      description = "Allow Internal Cluster UDP Traffic"
+      direction   = "in"
+      protocol    = "udp"
+      port        = "any"
+      source_ips  = local.whitelisted_ips
     },
 
     # Allow all traffic to the kube api server
     {
-      direction  = "in"
-      protocol   = "tcp"
-      port       = "6443"
-      source_ips = ["0.0.0.0/0", "::/0"]
+      description = "Allow Incoming Requests to Kube API Server"
+      direction   = "in"
+      protocol    = "tcp"
+      port        = "6443"
+      source_ips  = ["0.0.0.0/0", "::/0"]
     },
 
     # Allow all traffic to the ssh ports
     {
-      direction  = "in"
-      protocol   = "tcp"
-      port       = "22"
-      source_ips = ["0.0.0.0/0", "::/0"]
+      description = "Allow Incoming SSH Traffic"
+      direction   = "in"
+      protocol    = "tcp"
+      port        = "22"
+      source_ips  = ["0.0.0.0/0", "::/0"]
     }
     ], var.ssh_port == 22 ? [] : [
     {
-      direction  = "in"
-      protocol   = "tcp"
-      port       = var.ssh_port
-      source_ips = ["0.0.0.0/0", "::/0"]
+      description = "Allow Incoming SSH Traffic"
+      direction   = "in"
+      protocol    = "tcp"
+      port        = var.ssh_port
+      source_ips  = ["0.0.0.0/0", "::/0"]
     },
     ], !var.restrict_outbound_traffic ? [] : [
     # Allow basic out traffic
     # ICMP to ping outside services
     {
+      description     = "Allow Outbound ICMP Ping Requests"
       direction       = "out"
       protocol        = "icmp"
       port            = ""
@@ -181,12 +181,14 @@ locals {
 
     # DNS
     {
+      description     = "Allow Outbound TCP DNS Requests"
       direction       = "out"
       protocol        = "tcp"
       port            = "53"
       destination_ips = ["0.0.0.0/0", "::/0"]
     },
     {
+      description     = "Allow Outbound UDP DNS Requests"
       direction       = "out"
       protocol        = "udp"
       port            = "53"
@@ -195,12 +197,14 @@ locals {
 
     # HTTP(s)
     {
+      description     = "Allow Outbound HTTP Requests"
       direction       = "out"
       protocol        = "tcp"
       port            = "80"
       destination_ips = ["0.0.0.0/0", "::/0"]
     },
     {
+      description     = "Allow Outbound HTTPS Requests"
       direction       = "out"
       protocol        = "tcp"
       port            = "443"
@@ -209,6 +213,7 @@ locals {
 
     #NTP
     {
+      description     = "Allow Outbound UDP NTP Requests"
       direction       = "out"
       protocol        = "udp"
       port            = "123"
@@ -218,30 +223,34 @@ locals {
     # Allow incoming web traffic for single node clusters, because we are using k3s servicelb there,
     # not an external load-balancer.
     {
-      direction  = "in"
-      protocol   = "tcp"
-      port       = "80"
-      source_ips = ["0.0.0.0/0", "::/0"]
+      description = "Allow Incoming HTTP Connections"
+      direction   = "in"
+      protocol    = "tcp"
+      port        = "80"
+      source_ips  = ["0.0.0.0/0", "::/0"]
     },
     {
-      direction  = "in"
-      protocol   = "tcp"
-      port       = "443"
-      source_ips = ["0.0.0.0/0", "::/0"]
+      description = "Allow Incoming HTTPS Connections"
+      direction   = "in"
+      protocol    = "tcp"
+      port        = "443"
+      source_ips  = ["0.0.0.0/0", "::/0"]
     }
     ], var.block_icmp_ping_in ? [] : [
     {
-      direction  = "in"
-      protocol   = "icmp"
-      port       = ""
-      source_ips = ["0.0.0.0/0", "::/0"]
+      description = "Allow Incoming ICMP Ping Requests"
+      direction   = "in"
+      protocol    = "icmp"
+      port        = ""
+      source_ips  = ["0.0.0.0/0", "::/0"]
     }
     ], var.cni_plugin != "cilium" ? [] : [
     {
-      direction  = "in"
-      protocol   = "tcp"
-      port       = "4244-4245"
-      source_ips = ["0.0.0.0/0", "::/0"]
+      description = "Allow Incoming Requests to Hubble Server & Hubble Relay (Cilium)"
+      direction   = "in"
+      protocol    = "tcp"
+      port        = "4244-4245"
+      source_ips  = ["0.0.0.0/0", "::/0"]
     }
   ])
 
@@ -330,7 +339,7 @@ locals {
 ipam:
  operator:
   clusterPoolIPv4PodCIDRList:
-   - ${local.cluster_cidr_ipv4}
+   - ${var.cluster_ipv4_cidr}
 devices: "eth1"
 %{if var.enable_wireguard~}
 l7Proxy: false
@@ -362,7 +371,7 @@ spec:
         - name: calico-node
           env:
             - name: CALICO_IPV4POOL_CIDR
-              value: "${local.cluster_cidr_ipv4}"
+              value: "${var.cluster_ipv4_cidr}"
             - name: FELIX_WIREGUARDENABLED
               value: "${var.enable_wireguard}"
 
@@ -455,7 +464,7 @@ additionalArguments:
   EOT
 
   rancher_values = var.rancher_values != "" ? var.rancher_values : <<EOT
-hostname: "${var.rancher_hostname} ? ${var.rancher_hostname} : ${var.lb_hostname}"
+hostname: "${var.rancher_hostname != "" ? var.rancher_hostname : var.lb_hostname}"
 replicas: ${length(local.control_plane_nodes)}
 bootstrapPassword: "${length(var.rancher_bootstrap_password) == 0 ? resource.random_password.rancher_bootstrap[0].result : var.rancher_bootstrap_password}"
   EOT

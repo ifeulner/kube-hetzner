@@ -2,6 +2,7 @@ variable "hcloud_token" {
   description = "Hetzner Cloud API Token."
   type        = string
   sensitive   = true
+  default     = ""
 }
 
 variable "ssh_port" {
@@ -48,6 +49,18 @@ variable "network_region" {
   description = "Default region for network."
   type        = string
   default     = "eu-central"
+}
+
+variable "network_ipv4_cidr" {
+  description = "The main network cidr that all subnets will be created upon."
+  type        = string
+  default     = "10.0.0.0/8"
+}
+
+variable "cluster_ipv4_cidr" {
+  description = "Internal Pod CIDR, used for the controller and currently for calico."
+  type        = string
+  default     = "10.42.0.0/16"
 }
 
 variable "load_balancer_location" {

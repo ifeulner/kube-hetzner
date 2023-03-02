@@ -1,13 +1,17 @@
 locals {
-  # First and foremost set your Hetzner API token here. It can be found in your Project > Security > API Token (Read & Write is required).
-  hcloud_token = "xxxxxxxxxxxxxxxxYYYYYYYYYYzzzzzzzzzzzzzzzzz"
+  # You have the choice of setting your Hetzner API token here or define the TF_VAR_hcloud_token env
+  # within your shell, such as such: export TF_VAR_hcloud_token=xxxxxxxxxxx 
+  # If you choose to define it in the shell, this can be left as is.
+
+  # Your Hetzner token can be found in your Project > Security > API Token (Read & Write is required).
+  hcloud_token = "xxxxxxxxxxx"
 }
 
 module "kube-hetzner" {
   providers = {
     hcloud = hcloud
   }
-  hcloud_token = local.hcloud_token
+  hcloud_token = var.hcloud_token != "" ? var.hcloud_token : local.hcloud_token
 
   # Then fill or edit the below values. Only the first values starting with a * are obligatory; the rest can remain with their default values, or you
   # could adapt them to your needs.
@@ -49,6 +53,13 @@ module "kube-hetzner" {
   # These can be customized, or left with the default values
   # * For Hetzner locations see https://docs.hetzner.com/general/others/data-centers-and-connection/
   network_region = "eu-central" # change to `us-east` if location is ash
+
+  # If you must change the network CIDR you can do so below, but it is highly advised against.
+  # network_ipv4_cidr = "10.0.0.0/8"
+
+  # If you must change the cluster CIDR you can do so below, but it is highly advised against.
+  # Cluster CIDR must be a part of the network CIDR!
+  # cluster_ipv4_cidr = "10.42.0.0/16"
 
   # For the control planes, at least three nodes are the minimum for HA. Otherwise, you need to turn off the automatic upgrades (see README).
   # **It must always be an ODD number, never even!** Search the internet for "splitbrain problem with etcd" or see https://rancher.com/docs/k3s/latest/en/installation/ha-embedded/
@@ -325,16 +336,16 @@ module "kube-hetzner" {
   # Adding extra firewall rules, like opening a port
   # More info on the format here https://registry.terraform.io/providers/hetznercloud/hcloud/latest/docs/resources/firewall
   # extra_firewall_rules = [
-  #   # For Postgres
   #   {
+  #     description = "For Postgres"
   #     direction       = "in"
   #     protocol        = "tcp"
   #     port            = "5432"
   #     source_ips      = ["0.0.0.0/0", "::/0"]
   #     destination_ips = [] # Won't be used for this rule
   #   },
-  #   # To Allow ArgoCD access to resources via SSH
   #   {
+  #     description = "To Allow ArgoCD access to resources via SSH"
   #     direction       = "out"
   #     protocol        = "tcp"
   #     port            = "22"
@@ -524,7 +535,7 @@ ports:
   # Nginx, all Nginx helm values can be found at https://github.com/kubernetes/ingress-nginx/blob/main/charts/ingress-nginx/values.yaml
   # You can also have a look at https://kubernetes.github.io/ingress-nginx/, to understand how it works, and all the options at your disposal.
   # The following is an example, please note that the current indentation inside the EOT is important.
-  /*   nginx_ingress_values = <<EOT
+  /*   nginx_values = <<EOT
 controller:
   watchIngressWithoutClass: "true"
   kind: "DaemonSet"
@@ -556,7 +567,7 @@ bootstrapPassword: "supermario"
 }
 
 provider "hcloud" {
-  token = local.hcloud_token
+  token = var.hcloud_token != "" ? var.hcloud_token : local.hcloud_token
 }
 
 terraform {
@@ -572,4 +583,9 @@ terraform {
 output "kubeconfig" {
   value     = module.kube-hetzner.kubeconfig
   sensitive = true
+}
+
+variable "hcloud_token" {
+  sensitive = true
+  default   = ""
 }
